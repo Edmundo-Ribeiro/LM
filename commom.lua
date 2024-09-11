@@ -84,7 +84,30 @@ RELE_E.loads = {
 --Adicionar todos os modulos em uma lista
 CABLE_LIST = {DIMMER_A ,DIMMER_B ,DIMMER_C ,DIMMER_D ,RELE_E}
 
+function createModuleInterface(...)
+    local args = {...}
+    local interface = {}
 
+    -- Check if the first argument is a table (for a list of modules)
+    if type(args[1]) == "table" and args[1].loads then
+        -- Single module passed
+        args = {args}
+    elseif type(args[1]) == "table" then
+        -- A list of modules passed as a single argument
+        args = args[1]
+    end
+
+    -- Iterate over each module
+    for _, module in ipairs(args) do
+        -- Iterate over each load in the current module's loads
+        for loadName, inputNumber in pairs(module.loads) do
+            -- Create a table with the input number and module object
+            interface[loadName] = {input = inputNumber, module = module}
+        end
+    end
+
+    return interface
+end
 
 
 XRGB1 = Xbus.new("$66,$BE,$3B", "XRGB1","RGBW_DIMMER")

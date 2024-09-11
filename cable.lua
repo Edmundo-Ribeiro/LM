@@ -1,62 +1,66 @@
 local Controlat = require('controlart')
 
-
-local CableRelay = {
-  inputs_status={},
-  outputs_status={}
-}
-
-setmetatable(CableRelay, { __index = Controlart })
-
-
-function CableRelay.new(ip, mac, name)
-  local o = Controlart.new(ip, mac, name, "CableRelay_RELAY")
-  setmetatable(obj, self)
-  self.__index = self
-  return o
-end
-
-
-function CableRelay:getIos()
+function Controlart:getIos()
   
-  local cmd = "mdcmd_getmd,"..self.MAC
-  local res = nil
+  local last_input_index = 0
+    if self:checkType(TYPES.CABLE_RELAY) then
+      last_input_index = 12 + 2 -- possui 12 entradas + offset de 2 posições
+    elseif self:checkType(TYPES.CABLE_DIMMER) then
+      last_input_index = 11 + 2
+    else
+      return 
+  end
+  
   local i = 0
-  local last_input_index = 12 + 2
   local ins = {}
   local outs = {}
-  res = self:sendCommand(cmd)
-
-   for str in string.gmatch(res, '([^,]+)') do
-    	if i > 1 then
-      
-      	if i < last_input_index then 
-        	table.insert(ins,tonumber(str))
+  
+    local cmd = "mdcmd_getmd,"..self.MAC
+    local res = self:sendCommand(cmd)
+  
+    for str in string.gmatch(res, '([^,]+)') do
+      if i > 1 then
+        if i < last_input_index then 
+          table.insert(ins,tonumber(str))
         else
-        	table.insert(outs,tonumber(str))
+          table.insert(outs,tonumber(str))
         end
-    	end
+      end
       i = i+1
     end
-  self.outputs_status = outs
+    self.outputs_status = outs
+    --por enquanto não estou interessado em fazer nada com os inputs
+    -- self.inputs_status = ins
+    self.lastIoUpdate = os.time()
+  end
 
-end
+function Controlart:setOutput(ch,val)
 
-function CableRelay:setOutput(ch,val)
+  if not self:checkType(TYPES.CABLE_RELAY, TYPES.CABLE_DIMMER) then 
+    return 
+  end
 
     local cmd = "mdcmd_sendrele,"..self.MAC..","..tostring(ch)..","..tostring(val)
     --log(cmd)
     return self:sendCommand(cmd)
 end
 
-function CableRelay:setOutputs(mask,val)
+function Controlart:setOutputs(mask,val)
+
+  if not self:checkType(TYPES.CABLE_RELAY, TYPES.CABLE_DIMMER) then 
+    return 
+  end
 
     local cmd = "mdcmd_msendrele,"..self.MAC..","..tostring(mask)..","..tostring(val)
     --log(cmd)
     return self:sendCommand(cmd)
 end
 
-function CableRelay:toggleOutputs(mask)
+function Controlart:toggleOutputs(mask)
+
+  if not self:checkType(TYPES.CABLE_RELAY, TYPES.CABLE_DIMMER) then 
+    return 
+  end
 
     local cmd = "mdcmd_mtogglerele,"..self.MAC..","..tostring(mask)
     --log(cmd)
@@ -64,14 +68,23 @@ function CableRelay:toggleOutputs(mask)
 end
 
 
-function CableRelay:masterOff()
+function Controlart:masterOff()
+
+  if not self:checkType(TYPES.CABLE_RELAY, TYPES.CABLE_DIMMER) then 
+    return 
+  end
 	--desligar todas as saidas de uma vez  
     local cmd = "mdcmd_setalloffmd,"..self.MAC
     --log(cmd)
     return self:sendCommand(cmd)
 end
 
-function CableRelay:masterOn()
+function Controlart:masterOn()
+
+  if not self:checkType(TYPES.CABLE_RELAY, TYPES.CABLE_DIMMER) then 
+    return 
+  end
+
 	--desligar todas as saidas de uma vez  
     local cmd = "mdcmd_setallonmd,"..self.MAC
     --log(cmd)
@@ -79,7 +92,12 @@ function CableRelay:masterOn()
 end
 
 
-function CableRelay:reset()
+function Controlart:reset()
+
+  if not self:checkType(TYPES.CABLE_RELAY, TYPES.CABLE_DIMMER) then 
+    return 
+  end
+
   local res = self:sendCommand("reset_cCableRelay_cCableRelay")
   if res == "OK" then
     log("Reset de: "..self:toString().." enviado com sucesso\n")
@@ -91,8 +109,11 @@ function CableRelay:reset()
 end
 
 
+function Controlart:askForMac()
 
-function CableRelay:askForMac()
+  if not self:checkType(TYPES.CABLE_RELAY, TYPES.CABLE_DIMMER) then 
+    return 
+  end
     
     local res = self:sendCommand("get_mac_addr")
     local formatedMac =  macString(res)
@@ -101,7 +122,3 @@ function CableRelay:askForMac()
     return formatedMac
     
 end
-
-
-
-return CableRelay

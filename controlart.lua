@@ -1,6 +1,11 @@
 
 local CRLF = '\r\n'
-
+local TYPES = {
+  CABLE_RELAY = 1,
+  CABLE_DIMMER = 2,
+  XPORT = 3,
+  SEVENPORT = 4
+}
 -- Coloca o mac no formato que a controlart entende nos comandos TCP
 function formatMac(mac_string)
     return "$".. mac_string:sub(1,2) .. ",$" .. mac_string:sub(4,5) .. ",$" .. mac_string:sub(7,8)
@@ -171,7 +176,9 @@ end
 function Controlart:checkType(...)
   local args = {...}
   for i, v in ipairs(args) do
-    if v == self.TYPE then return true
+    if v == self.TYPE then 
+      return true
+    end
   end
   return false
 end
