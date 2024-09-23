@@ -1,36 +1,42 @@
 require('socket')
 
--- Funções para converter valores --------------
+-- Converts boolean to number
+-- @param b boolean: The input boolean value
+-- @return number: Returns 1 if true, otherwise 0
 function boolToNumber(b) return b and 1 or 0 end
 
+-- Converts number to boolean
+-- @param n number: The input number
+-- @return boolean: Returns true if n is not 0, otherwise false
 function numberToBool(n) return n ~= 0 end
 
+-- Converts a percentage (0-100) to a byte (0-255)
+-- @param n number: The input percentage (0-100)
+-- @return number: A byte value in the range 0-255
 function scaleToByte(n) return math.floor((n / 100) * 255) end
 
-function byteToScale() return math.floor((n / 255) * 100) end
------------------------------------------------
+-- Converts a byte (0-255) to a percentage (0-100)
+-- @param n number: The input byte (0-255)
+-- @return number: A percentage value in the range 0-100
+function byteToScale(n) return math.floor((n / 255) * 100) end
 
--- Interface para manipulação facilitada dos devices
--- recebe lista de devicees e retorna tabela que relaciona o nome das seções com o canal e modulo que está conectada
+-- Creates a module interface mapping section names to channels and modules
+-- @param ... table: One or more module tables or a list of module tables
+-- @return table: A table mapping section names to their respective channel and module
 function createModuleInterface(...)
     local args = {...}
     local interface = {}
 
-    -- Check if the first argument is a table (for a list of modules)
+    -- If a single module or a list of modules is passed
     if type(args[1]) == "table" and args[1].loads then
-        -- Single module passed
-        args = args
+        args = args -- Single module passed
     elseif type(args[1]) == "table" then
-        -- A list of modules passed as a single argument
-        args = args[1]
+        args = args[1] -- List of modules passed
     end
 
-    -- Iterate over each module
+    -- Map each module's loads (section names) to the corresponding channel and module
     for _, module in ipairs(args) do
-        -- log(_,module)
-        -- Iterate over each load in the current module's loads
         for loadName, inputNumber in pairs(module.loads) do
-            -- Create a table with the input number and module object
             interface[loadName] = {ch = inputNumber, module = module}
         end
     end
@@ -38,37 +44,43 @@ function createModuleInterface(...)
     return interface
 end
 
--- Função que deverá ser chamada para resolver eventos de iluminação gerados por modulos cabeados
--- executa o evento no modulo, atualiza objeto de status e atualiza IOs
+-- Handles light events triggered by wired modules
+-- @param e table: Event object containing event details
+-- @param interface table: The interface mapping section names to channels and modules
+-- @return nil
+-- @note Updates the status of the section based on the event, handles both on/off and dimmer events
 function executeLightEvent(e, interface)
 
-    local section_name = grp.alias(e.dst)
-    local value = e.getvalue()
+    local section_name = grp.alias(e.dst) -- Get the section name from the event
+    local value = e.getvalue() -- Get event value (could be boolean or dimmer value)
     local channel = nil
 
-    -- Decidir se é on/off ou dimmer 
+    -- Convert value to appropriate format (boolean to number, percentage to byte)
     if type(value) == 'boolean' then
         value = boolToNumber(value)
     else
         value = scaleToByte(value)
     end
 
+    -- Find the module and channel for the section
     local section = interface[section_name]
 
     if section then
         local module = section.module
-        if module:connect() then
-            local res = module:setOutput(section.ch, value)
-            module:updateIO(res)
-            module:disconnect()
+        if module:connect() then -- Connect to the module
+            local res = module:setOutput(section.ch, value) -- Set output value for the channel
+            module:updateIO(res) -- Update IO states in the module
+            module:disconnect() -- Disconnect from the module
             grp.checkupdate("_" .. section_name, numberToBool(
-                                module.outputs_status[section.ch + 1]), 1) -- atualiza o status
-
+                                module.outputs_status[section.ch + 1]), 1) -- Update object status
         end
     end
 end
 
--- atualizar status dos objetos knx
+-- Updates the status of KNX objects based on module output states
+-- @param m table: The module containing load and output status
+-- @return nil
+-- @note Iterates through each load and updates the status of the corresponding KNX object
 function updateObjects(m)
     for obj_name, ch in pairs(m.loads) do
         grp.checkupdate("_" .. obj_name, numberToBool(m.outputs_status[ch + 1]),
@@ -76,21 +88,21 @@ function updateObjects(m)
     end
 end
 
--------------------------------------------------
-
+-- Load necessary modules
 require('socket')
 CABLE = require('user.cable')
 
+-- Define types of modules
 TYPES = {CABLE_RELAY = 1, CABLE_DIMMER = 2, XPORT = 3, SEVENPORT = 4}
 
--- Criação de modulos cabeados
+-- Creation of cable modules (e.g., dimmers and relays) with IP, name, and type
 DIMMER_A = CABLE:new("192.168.0.121", '', "DIMMER_A", TYPES.CABLE_DIMMER)
 DIMMER_B = CABLE:new("192.168.0.122", '', "DIMMER_B", TYPES.CABLE_DIMMER)
 DIMMER_C = CABLE:new("192.168.0.123", '', "DIMMER_C", TYPES.CABLE_DIMMER)
 DIMMER_D = CABLE:new("192.168.0.124", '', "DIMMER_D", TYPES.CABLE_DIMMER)
 RELE_E = CABLE:new("192.168.0.125", '', "RELE_E", TYPES.CABLE_RELAY)
 
--- Tabela de associação lampadas e modulos
+-- Associate dimmers with their respective loads (sections)
 DIMMER_A.loads = {
     ["S13"] = 0,
     ["S14"] = 1,
@@ -143,14 +155,12 @@ RELE_E.loads = {
     ["S21"] = 9
 }
 
--- DEVICE_INTERFACE = createModuleInterface(DIMMER_A, DIMMER_B, DIMMER_C, DIMMER_D, RELE_E) 
-
+-- Test cable modules
 local CABLE = require('user.cable')
 local teste_rele = CABLE:new("10.100.200.204", '', "rele", TYPES.CABLE_RELAY)
--- local teste_dimmer = CABLE:new("10.100.200.179",'',"dimmer", TYPES.CABLE_DIMMER)
 
+-- Associate test relay with loads
 teste_rele.loads = {
-    -- ["S1"] = 0,
     ["S2"] = 1,
     ["S3"] = 2,
     ["S4"] = 3,
@@ -159,5 +169,7 @@ teste_rele.loads = {
     ["S7"] = 6,
     ["S8"] = 8
 }
+
+-- Create interface for the test modules
 TEST_LIST = {teste_rele}
 TEST_INTERFACE = createModuleInterface(TEST_LIST)
