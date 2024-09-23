@@ -1,34 +1,96 @@
---Funções para converter valores --------------
-function boolToNumber(b) 
-	return  b and 1 or 0
-end
-
-function numberToBool(n)
-	return  n ~= 0
-end
-
-function scaleToByte(n)
-    return math.floor((n / 100) * 255)
-end 
-
-function byteToScale()
-    return  math.floor((n / 255) * 100)
-end
------------------------------------------------
 require('socket')
-CableRelay = require('user.cable_relay')
-CableDimmer = require('user.cable_dimmer')
-Xport = require('user.xport')   
 
+-- Funções para converter valores --------------
+function boolToNumber(b) return b and 1 or 0 end
 
---Criação de modulos cabeados
-DIMMER_A = CableDimmer.new("192.168.0.121",'',"DIMMER_A")
-DIMMER_B = CableDimmer.new("192.168.0.122",'',"DIMMER_B")
-DIMMER_C = CableDimmer.new("192.168.0.123",'',"DIMMER_C")
-DIMMER_D = CableDimmer.new("192.168.0.124",'',"DIMMER_D")
-RELE_E = CableRelay.new("192.168.0.125",'',"RELE_E")
+function numberToBool(n) return n ~= 0 end
 
---Tabela de associação lampadas e modulos
+function scaleToByte(n) return math.floor((n / 100) * 255) end
+
+function byteToScale() return math.floor((n / 255) * 100) end
+-----------------------------------------------
+
+-- Interface para manipulação facilitada dos devices
+-- recebe lista de devicees e retorna tabela que relaciona o nome das seções com o canal e modulo que está conectada
+function createModuleInterface(...)
+    local args = {...}
+    local interface = {}
+
+    -- Check if the first argument is a table (for a list of modules)
+    if type(args[1]) == "table" and args[1].loads then
+        -- Single module passed
+        args = args
+    elseif type(args[1]) == "table" then
+        -- A list of modules passed as a single argument
+        args = args[1]
+    end
+
+    -- Iterate over each module
+    for _, module in ipairs(args) do
+        -- log(_,module)
+        -- Iterate over each load in the current module's loads
+        for loadName, inputNumber in pairs(module.loads) do
+            -- Create a table with the input number and module object
+            interface[loadName] = {ch = inputNumber, module = module}
+        end
+    end
+
+    return interface
+end
+
+-- Função que deverá ser chamada para resolver eventos de iluminação gerados por modulos cabeados
+-- executa o evento no modulo, atualiza objeto de status e atualiza IOs
+function executeLightEvent(e, interface)
+
+    local section_name = grp.alias(e.dst)
+    local value = e.getvalue()
+    local channel = nil
+
+    -- Decidir se é on/off ou dimmer 
+    if type(value) == 'boolean' then
+        value = boolToNumber(value)
+    else
+        value = scaleToByte(value)
+    end
+
+    local section = interface[section_name]
+
+    if section then
+        local module = section.module
+        if module:connect() then
+            local res = module:setOutput(section.ch, value)
+            module:updateIO(res)
+            module:disconnect()
+            grp.checkupdate("_" .. section_name, numberToBool(
+                                module.outputs_status[section.ch + 1]), 1) -- atualiza o status
+
+        end
+    end
+end
+
+-- atualizar status dos objetos knx
+function updateObjects(m)
+    for obj_name, ch in pairs(m.loads) do
+        grp.checkupdate("_" .. obj_name, numberToBool(m.outputs_status[ch + 1]),
+                        1)
+    end
+end
+
+-------------------------------------------------
+
+require('socket')
+CABLE = require('user.cable')
+
+TYPES = {CABLE_RELAY = 1, CABLE_DIMMER = 2, XPORT = 3, SEVENPORT = 4}
+
+-- Criação de modulos cabeados
+DIMMER_A = CABLE:new("192.168.0.121", '', "DIMMER_A", TYPES.CABLE_DIMMER)
+DIMMER_B = CABLE:new("192.168.0.122", '', "DIMMER_B", TYPES.CABLE_DIMMER)
+DIMMER_C = CABLE:new("192.168.0.123", '', "DIMMER_C", TYPES.CABLE_DIMMER)
+DIMMER_D = CABLE:new("192.168.0.124", '', "DIMMER_D", TYPES.CABLE_DIMMER)
+RELE_E = CABLE:new("192.168.0.125", '', "RELE_E", TYPES.CABLE_RELAY)
+
+-- Tabela de associação lampadas e modulos
 DIMMER_A.loads = {
     ["S13"] = 0,
     ["S14"] = 1,
@@ -47,7 +109,7 @@ DIMMER_B.loads = {
     ["S16"] = 3,
     ["S17"] = 4,
     ["S18"] = 5,
-    ["S31"] = 6,
+    ["S31"] = 6
 }
 
 DIMMER_C.loads = {
@@ -57,7 +119,7 @@ DIMMER_C.loads = {
     ["S32"] = 3,
     ["S39"] = 4,
     ["S40"] = 5,
-    ["S41"] = 6,
+    ["S41"] = 6
 }
 
 DIMMER_D.loads = {
@@ -65,7 +127,7 @@ DIMMER_D.loads = {
     ["S36"] = 1,
     ["S38"] = 2,
     ["S37"] = 4,
-    ["S34"] = 8,
+    ["S34"] = 8
 }
 
 RELE_E.loads = {
@@ -77,152 +139,25 @@ RELE_E.loads = {
     ["S6"] = 5,
     ["S7"] = 6,
     ["S8"] = 7,
-    ["S42"] =  8,
-    ["S21"] =  9
+    ["S42"] = 8,
+    ["S21"] = 9
 }
 
---Adicionar todos os modulos em uma lista
-CABLE_LIST = {DIMMER_A ,DIMMER_B ,DIMMER_C ,DIMMER_D ,RELE_E}
+-- DEVICE_INTERFACE = createModuleInterface(DIMMER_A, DIMMER_B, DIMMER_C, DIMMER_D, RELE_E) 
 
-function createModuleInterface(...)
-    local args = {...}
-    local interface = {}
+local CABLE = require('user.cable')
+local teste_rele = CABLE:new("10.100.200.204", '', "rele", TYPES.CABLE_RELAY)
+-- local teste_dimmer = CABLE:new("10.100.200.179",'',"dimmer", TYPES.CABLE_DIMMER)
 
-    -- Check if the first argument is a table (for a list of modules)
-    if type(args[1]) == "table" and args[1].loads then
-        -- Single module passed
-        args = {args}
-    elseif type(args[1]) == "table" then
-        -- A list of modules passed as a single argument
-        args = args[1]
-    end
-
-    -- Iterate over each module
-    for _, module in ipairs(args) do
-        -- Iterate over each load in the current module's loads
-        for loadName, inputNumber in pairs(module.loads) do
-            -- Create a table with the input number and module object
-            interface[loadName] = {input = inputNumber, module = module}
-        end
-    end
-
-    return interface
-end
-
-
-XRGB1 = Xbus.new("$66,$BE,$3B", "XRGB1","RGBW_DIMMER")
-XRGB3 = Xbus.new("$0E,$55,$CF", "XRGB3","RGBW_DIMMER")
-XRGB4 = Xbus.new("$46,$BC,$DB", "XRGB4","RGBW_DIMMER")
-XRGB6 = Xbus.new("$39,$27,$64", "XRGB6","RGBW_DIMMER")
-XRGB7 = Xbus.new("$04,$F5,$CB", "XRGB7","RGBW_DIMMER")
-XRGB8 = Xbus.new("$AA,$AA,$AA", "XRGB8","RGBW_DIMMER")
-XBR1 = Xbus.new("$16,$E3,$7C", "XBR1", "RELAY")
-XBD1 = Xbus.new("$5F,$BD,$DE", "XBD1", "DIMMER")
-
-
-XRGB1.loads = { ["S1"] = 15 }--1111 = 15 indica que todos os canais estão sendo controlados juntamente
-XRGB1:linkXbus(XRGB6) -- Banheiro tem 2 xbus que devem responer juntos
-
-XRGB3.loads = { 
-    ["S23A"] = 1,--001
-    ["S23B"] = 2,--010
-    ["S23C"] = 4 --100
+teste_rele.loads = {
+    -- ["S1"] = 0,
+    ["S2"] = 1,
+    ["S3"] = 2,
+    ["S4"] = 3,
+    ["S5"] = 4,
+    ["S6"] = 5,
+    ["S7"] = 6,
+    ["S8"] = 8
 }
-XRGB4.loads = { ["S25"] = 15 }
-XRGB7.loads = { ["S50A"] = 15 }
-XRGB8.loads = { ["S48"] = 15 }
-
-XBR1.loads = {
-    ["S29A"] = 1,
-    ["S29B"] = 2,
-}
-
-XBD1.loads = {
-    ["S44A"] = 1,
-    ["S44B"] = 2,
-}
-
-
-xport_bunker = Xport.new("192.168.0.73",,"XPORT")
-xport_bunker:addXbus({XRGB1, XRGB3, XRGB4, XRGB6, XRGB7, XRGB8, XBR1, XBD1})
-
-senvenport = SevenPort.new("192.168.0.74",,"SEVENPORT")
-
-
-
-
---Função que deverá ser chamada para resolver eventos de luminação gerados por modulos cabeados
-function executeCableLightEvent(e, modules_list)
-
-    local section_name = grp.alias(e.dst)
-    local value = e.getvalue()
-    local channel = nil
-
-    if type(value) == boolean then
-        value = boolToNumber(value)
-    else
-        value = scaleToByte(value)
-    
-    for i, module in ipairs(modules_list) do
-        
-        channel = module.loads[section_name]
-
-        if channel then
-            if module:connect() then
-                module:setOutput(channel, value)
-                module:disconnect()
-                return
-            end
-        end
-    end
-end
-
-
---Função que deverá ser chamada para resolver eventos de luminação gerados por xbus
-function executeXbusLightEvent(e,xport)
-    local section_name = grp.alias(e.dst)
-    local value = e.getvalue()
-    local channel = nil
-
-    if type(value) == boolean then
-        value = boolToNumber(value)
-    else
-        value = scaleToByte(value)
-
-    for i,module in ipairs(xport.xbus) do
-        channel = module.loads[section_name]
-        if channel then
-            if xport:connect() then
-                module:setOutput(channel, value)
-                xport:disconnect()
-                return
-            end
-        end
-    end
-end
-
-
-
---Função que deverá ser chamada para resolver eventos de IR na xport ou sevenport
-function executeIrEvent(e,ir_map)
-    
-
-
-end
-
-code_tes = require("user.bunker_ir_codes")["AR_BUNKER"]
-local SevenPort = require("user.7port")
-
-local ir = SevenPort.new("192.168.1.110","7PORT")
-
-ir_list_test = {ir}
-
-
-function updateObjects(m)
-	for obj_name, ch in pairs(m.loads) do
-    grp.update("_"..obj_name,numberToBool(m.outputs_status[ch+1]))
-    --grp.checkupdate("_"..obj_name, numberToBool(m.outputs_status[ch]))
-    
-	end
-
-end
+TEST_LIST = {teste_rele}
+TEST_INTERFACE = createModuleInterface(TEST_LIST)
