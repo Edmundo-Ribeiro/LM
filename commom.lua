@@ -90,7 +90,8 @@ end
 
 -- Load necessary modules
 require('socket')
-CABLE = require('user.cable')
+
+--[[CABLE = require('user.Cable')
 
 -- Define types of modules
 TYPES = {CABLE_RELAY = 1, CABLE_DIMMER = 2, XPORT = 3, SEVENPORT = 4}
@@ -154,7 +155,6 @@ RELE_E.loads = {
     ["S42"] = 8,
     ["S21"] = 9
 }
-
 -- Test cable modules
 local CABLE = require('user.cable')
 local teste_rele = CABLE:new("10.100.200.204", '', "rele", TYPES.CABLE_RELAY)
@@ -173,3 +173,10 @@ teste_rele.loads = {
 -- Create interface for the test modules
 TEST_LIST = {teste_rele}
 TEST_INTERFACE = createModuleInterface(TEST_LIST)
+]]--
+
+
+XPORT = require('user.xport')
+
+x_test = XPORT:new("10.100.200.247","","automatic")
+x_test:connect()
